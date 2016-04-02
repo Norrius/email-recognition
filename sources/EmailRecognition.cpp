@@ -10,81 +10,18 @@ using namespace std;
 
 RNG rng(12345);
 
-Mat image;
+vector<Mat> images;
 int a = 30; // Canny threshold 1
 int b = 50; // Canny threshold 2
 // int g = 5; // Gauss
 int d1 = 15; // Kernel size
 int d2 = 1; // 
-int n = 0;
+int n = 0; // image number
+int m = 0; // field number
 
 const char *WINDOW_NAME = "Display Image";
 
 tesseract::TessBaseAPI tess;
-
-/*void showContours() {
-    Mat shapes = Mat::zeros(image.size(), CV_8UC3); // draw contours here
-    vector<vector<Point> > contours;
-    vector<vector<Point> > good;
-    vector<vector<Point> > bad;
-    Mat gray;
-    cvtColor(image, gray, CV_BGR2GRAY);
-    GaussianBlur(gray, gray, Size(5, 5), 1, 1);
-    Mat bw;
-    Canny(gray, bw, a, b, 3, true);
-    findContours(bw.clone(), contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
-    // for (int i = 0; i < contours.size(); ++i) {
-    //     Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255));
-    //     drawContours(shapes, contours, i, color, 2, 8, 0, 0, Point());
-    // }
-
-    // imshow(WINDOW_NAME, shapes);
-
-    // return;
-    
-    std::vector<cv::Point> approx;
-    for (int i = 0; i < contours.size(); ++i) {
-        // Approximate contour with accuracy proportional
-        // to the contour perimeter
-        approxPolyDP(
-            Mat(contours[i]), 
-            approx, 
-            arcLength(Mat(contours[i]), true) * 0.02, 
-            true
-        );
-
-        if (fabs(cv::contourArea(contours[i])) > 1000 &&
-            arcLength(Mat(contours[i]), true) > 1000) {
-            good.push_back(approx);
-            cout << fabs(cv::contourArea(contours[i])) << ' '
-                 << arcLength(Mat(contours[i]), true) << '\n';
-
-            RotatedRect rect = minAreaRect(approx);
-            Point2f vtx[4];
-            rect.points(vtx);
-            for (int j = 0; j < 4; ++j) {
-                line(image, vtx[j], vtx[(j+1)%4], Scalar(0, 255, 0), 1, 16);
-                cout << vtx[j] << endl;
-            }
-        } else {
-            bad.push_back(approx);
-        }
-
-
-
-        // for (int j = 0; j < approx.size(); ++i) 
-        // cerr << approx.size() << endl;
-    }
-    image.copyTo(shapes);
-    for (int i = 0; i < good.size(); ++i) {
-        drawContours(shapes, good, i, Scalar(255, 255, 255), 2, 8, 0, 0, Point());
-    }
-    for (int i = 0; i < bad.size(); ++i) {
-        Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255));
-        drawContours(shapes, bad, i, color, 2, 8, 0, 0, Point());
-    }
-    imshow(WINDOW_NAME, shapes);
-}*/
 
 bool polyComparator(const vector<Point> &a, const vector<Point> &b) {
     return fabs(contourArea(a)) < fabs(contourArea(b));
@@ -169,18 +106,6 @@ vector<Rect> morph(const Mat &image, int d1, int d2, Mat &output) {
     return fields;
 }
 
-/* display the rotatedrect on the image
-    image.copyTo(output);
-
-    Point2f rectPoints[4];
-    rect.points(rectPoints);
-    for (int i = 0; i < 4; ++i) {
-        cout << rectPoints[i] << '\n';
-        line(output, rectPoints[i], rectPoints[(i+1)%4], Scalar(0, 0, 255), 3, 8);
-    }
-    // cout << endl;
-*/
-
 char* getText(const Mat &image) {
     tess.SetImage((uchar*)image.data, image.size().width,
         image.size().height, image.channels(), image.step1());
@@ -189,66 +114,100 @@ char* getText(const Mat &image) {
 }
 
 void onTrackbar(int, void*) {
-    RotatedRect rect = getRectangle(image, a, b);
-    Mat card = cutRect(image, rect);
+    RotatedRect rect = getRectangle(images[n], a, b);
+    Mat card = cutRect(images[n], rect);
 
-    // showContours();
     Mat output;
     vector<Rect> fields = morph(card, d1, d2, output);
-    /*for (int i = 0; i < fields.size(); ++i) {
-        // cout << fields[i].size() << endl;
-        // cout << getText(image(fields[i]))<< endl;
-        cout << getText(card(fields[i]).clone());
-    }*/
-    // getText(card(fields[n]));
+    
+    if (m >= fields.size()) {
+        m = fields.size() - 1;
+    }
 
-    imshow(WINDOW_NAME, card(fields[n]));
-    cout << getText(card(fields[n]).clone());
+    imshow(WINDOW_NAME, card(fields[m]));
+    // cout << getText(card(fields[m]).clone());
+}
+
+vector<string> getTextFromAllFields(const Mat &image) {
+    RotatedRect rect = getRectangle(image, a, b);
+    Mat card = cutRect(image, rect);
+    Mat output;
+    vector<Rect> fields = morph(card, d1, d2, output);
+    vector<string> result;
+    for (Rect rect : fields) {
+        result.push_back(getText(card(rect)));
+    }
+    return result;
 }
 
 int main(int argc, char** argv) {
-    // load image
     if (argc < 2) {
         cerr << "missing argument" << endl;
         return -1;
     }
 
-    // Mat image;
-    image = imread(argv[1]);
-    if (!image.data) {
-        cerr << "could not load image" << endl;
-        return -1;
-    }
+    tess.Init(0, "eng");
+    tess.SetVariable("tessedit_char_whitelist", "abcdefghijklmnopqrstuvwxyz012345789:-.@<>");
+    
+    if (strcmp(argv[1], "-cut") == 0) {
+        for (int i = 2; i < argc; ++i) {
+            Mat image = imread(argv[i]);
+            if (!image.data) {
+                cerr << "could not load image" << endl;
+                return -1;
+            }
 
-    if (argc == 3 && strcmp(argv[2], "-s") == 0) {
-        // silent
-        RotatedRect rect = getRectangle(image, a, b);
-        Point2f rectPoints[4];
-        rect.points(rectPoints);
-        for (int i = 0; i < 4; ++i) {
-            cout << rectPoints[i] << ", ";
-            //line(output, rectPoints[i], rectPoints[(i+1)%4], Scalar(0, 0, 255), 3, 8);
+            RotatedRect rect = getRectangle(image, a, b);
+            Point2f rectPoints[4];
+            rect.points(rectPoints);
+            for (int i = 0; i < 4; ++i) {
+                cout << rectPoints[i] << ", ";
+            }
+        }
+        return 0;
+    } else if (strcmp(argv[1], "-text") == 0) {
+        for (int i = 2; i < argc; ++i) {
+            Mat image = imread(argv[i]);
+            if (!image.data) {
+                cerr << "could not load image" << endl;
+                return -1;
+            }
+
+            vector<string> text = getTextFromAllFields(image);
+            for (String s : text) {
+                cout << s << endl;
+            }
         }
         return 0;
     }
-
-    tess.Init(0, "eng");
+    images = vector<Mat>(argc - 1);
+    for (int i = 1; i < argc; ++i) {
+        // Mat image;
+        images[i-1] = imread(argv[i]);
+        if (!images[i-1].data) {
+            cerr << "could not load image" << endl;
+            return -1;
+        }
+    }
 
     namedWindow(WINDOW_NAME, CV_GUI_EXPANDED);
     // setWindowProperty(WINDOW_NAME, WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
-
-    onTrackbar(0, 0);
-
     createTrackbar("Threshold 1", WINDOW_NAME, &a, 200, onTrackbar);
     createTrackbar("Threshold 2", WINDOW_NAME, &b, 200, onTrackbar);
     createTrackbar("Kernel X", WINDOW_NAME, &d1, 15, onTrackbar);
     createTrackbar("Kernel Y", WINDOW_NAME, &d2, 15, onTrackbar);
-    createTrackbar("N", WINDOW_NAME, &n, 15, onTrackbar);
+    if (images.size() > 1) {
+        createTrackbar("Image", WINDOW_NAME, &n, images.size()-1, onTrackbar);
+    }
+    createTrackbar("Field", WINDOW_NAME, &m, 15, onTrackbar);
 
+    onTrackbar(0, 0);
+    
     // press Esc to close
     int r = waitKey(0);
     while (r != 1048603 && r != 27) {
         r = waitKey(0);
     }
+
     return 0;
 }

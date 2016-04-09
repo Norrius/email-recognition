@@ -19,7 +19,10 @@ int d2 = 1; //
 int n = 0; // image number
 int m = 0; // field number
 
-const char *WINDOW_NAME = "Display Image";
+const char *WINDOW_MAIN = "Display Image";
+const char *WINDOW_CONTOUR = "Contour Detection";
+const char *WINDOW_CARD = "Card Isolation";
+const char *WINDOW_MORPH = "Morphology";
 
 tesseract::TessBaseAPI tess;
 
@@ -27,7 +30,7 @@ bool polyComparator(const vector<Point> &a, const vector<Point> &b) {
     return fabs(contourArea(a)) < fabs(contourArea(b));
 }
 
-RotatedRect getRectangle(const Mat &image, int thr1, int thr2) {
+RotatedRect getRectangle(const Mat &image, int thr1, int thr2, Mat *output=0) {
     Mat gray;
     cvtColor(image, gray, CV_BGR2GRAY);
     GaussianBlur(gray, gray, Size(5, 5), 1, 1);
@@ -46,6 +49,16 @@ RotatedRect getRectangle(const Mat &image, int thr1, int thr2) {
     vector<Point> bestPoly = *max_element(polys.begin(), polys.end(), polyComparator);
     RotatedRect bestRect = minAreaRect(bestPoly);
     
+    if (output) {
+        image.copyTo(*output);
+        cerr << polys.size() << endl;
+        for (int i = 0; i < (int)polys.size(); ++i) {
+            // cerr << i << endl;
+            Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255));
+            drawContours(*output, polys, i, color, 5, 8, 0, 0, Point());
+        }
+    }
+
     return bestRect;
 }
 
@@ -102,30 +115,63 @@ vector<Rect> morph(const Mat &image, int d1, int d2, Mat &output) {
             fields.push_back(rect);
         }
     }
-    // imshow(WINDOW_NAME, output);
+
     return fields;
 }
 
 char* getText(const Mat &image) {
-    tess.SetImage((uchar*)image.data, image.size().width,
-        image.size().height, image.channels(), image.step1());
+    Mat gray;
+    cvtColor(image, gray, CV_BGR2GRAY);
+    Mat binary;
+    threshold(gray, binary, 0.0, 255.0, CV_THRESH_BINARY | CV_THRESH_OTSU);
+
+    tess.SetImage((uchar*)binary.data, binary.size().width,
+        binary.size().height, binary.channels(), binary.step1());
     tess.Recognize(0);
-    return tess.GetUTF8Text();
+
+    char* s = tess.GetUTF8Text();
+    cout << tess.MeanTextConf() << endl;
+
+    return s;
 }
 
 void onTrackbar(int, void*) {
-    RotatedRect rect = getRectangle(images[n], a, b);
+    Mat outputContour;
+    Mat outputCard;
+    Mat outputMorph;
+
+    RotatedRect rect = getRectangle(images[n], a, b, &outputContour);
     Mat card = cutRect(images[n], rect);
 
-    Mat output;
-    vector<Rect> fields = morph(card, d1, d2, output);
+    vector<Rect> fields = morph(card, d1, d2, outputMorph);
     
     if (m >= fields.size()) {
         m = fields.size() - 1;
     }
 
-    imshow(WINDOW_NAME, card(fields[m]));
-    // cout << getText(card(fields[m]).clone());
+    Mat gray;
+    cvtColor(card(fields[m]), gray, CV_BGR2GRAY);
+    Mat binary;
+    threshold(gray, binary, 0.0, 255.0, CV_THRESH_BINARY | CV_THRESH_OTSU);
+
+    // Main output
+    imshow(WINDOW_MAIN, gray);
+    cout << getText(card(fields[m]).clone());
+
+    // Show contours
+    imshow(WINDOW_CONTOUR, outputContour);
+
+    // Detected card boundaries
+    images[n].copyTo(outputCard);
+    Point2f rectPoints[4];
+    rect.points(rectPoints);
+    for (int i = 0; i < 4; ++i) {
+        line(outputCard, rectPoints[i], rectPoints[(i+1)%4], Scalar(0, 0, 255), 5, 8);
+    }
+    imshow(WINDOW_CARD, outputCard);
+
+    // Morphology
+    imshow(WINDOW_MORPH, outputMorph);
 }
 
 vector<string> getTextFromAllFields(const Mat &image) {
@@ -147,7 +193,7 @@ int main(int argc, char** argv) {
     }
 
     tess.Init(0, "eng");
-    tess.SetVariable("tessedit_char_whitelist", "abcdefghijklmnopqrstuvwxyz012345789:-.@<>");
+    tess.SetVariable("tessedit_char_whitelist", "abcdefghijklmnopqrstuvwxyz0123456789:-.@<>()");
     
     if (strcmp(argv[1], "-cut") == 0) {
         for (int i = 2; i < argc; ++i) {
@@ -161,7 +207,7 @@ int main(int argc, char** argv) {
             Point2f rectPoints[4];
             rect.points(rectPoints);
             for (int i = 0; i < 4; ++i) {
-                cout << rectPoints[i] << ", ";
+                cout << rectPoints[i].x << ' ' << rectPoints[i].y << '\n';
             }
         }
         return 0;
@@ -190,16 +236,23 @@ int main(int argc, char** argv) {
         }
     }
 
-    namedWindow(WINDOW_NAME, CV_GUI_EXPANDED);
-    // setWindowProperty(WINDOW_NAME, WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
-    createTrackbar("Threshold 1", WINDOW_NAME, &a, 200, onTrackbar);
-    createTrackbar("Threshold 2", WINDOW_NAME, &b, 200, onTrackbar);
-    createTrackbar("Kernel X", WINDOW_NAME, &d1, 15, onTrackbar);
-    createTrackbar("Kernel Y", WINDOW_NAME, &d2, 15, onTrackbar);
+    namedWindow(WINDOW_CONTOUR, CV_GUI_EXPANDED);
+    resizeWindow(WINDOW_CONTOUR, 700, 500);
+    namedWindow(WINDOW_CARD, CV_GUI_EXPANDED);
+    resizeWindow(WINDOW_CARD, 700, 500);
+    namedWindow(WINDOW_MORPH, CV_GUI_EXPANDED);
+    resizeWindow(WINDOW_MORPH, 700, 500);
+    namedWindow(WINDOW_MAIN, CV_GUI_EXPANDED);
+    resizeWindow(WINDOW_MAIN, 500, 500);
+
+    createTrackbar("Threshold 1", WINDOW_MAIN, &a, 200, onTrackbar);
+    createTrackbar("Threshold 2", WINDOW_MAIN, &b, 200, onTrackbar);
+    createTrackbar("Kernel X", WINDOW_MAIN, &d1, 15, onTrackbar);
+    createTrackbar("Kernel Y", WINDOW_MAIN, &d2, 15, onTrackbar);
     if (images.size() > 1) {
-        createTrackbar("Image", WINDOW_NAME, &n, images.size()-1, onTrackbar);
+        createTrackbar("Image", WINDOW_MAIN, &n, images.size()-1, onTrackbar);
     }
-    createTrackbar("Field", WINDOW_NAME, &m, 15, onTrackbar);
+    createTrackbar("Field", WINDOW_MAIN, &m, 15, onTrackbar);
 
     onTrackbar(0, 0);
     

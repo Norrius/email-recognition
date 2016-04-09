@@ -1,7 +1,12 @@
+import os
 import math
 import subprocess
 
-path = '../cards/300/'
+path = os.path.dirname(os.path.realpath(__file__))
+execpath = path + '/../build/EmailRecognition'
+cardpath = path + '/../cards/dataset/'
+
+cardpath0 = path + '/../cards/300/'
 data = [
     ['card-01.jpg', [[804, 474], [1806, 492], [794, 1069], [1799, 1081]]],
     ['card-02.jpg', [[285, 467], [291, 1057], [1339, 455], [1347, 1041]]],
@@ -13,24 +18,28 @@ data = [
     ['card-13.jpg', [[398, 261], [1374, 542], [1235, 1042], [261, 761]]],
 ]
 
+def parse(raw):
+    return map(lambda x: map(float, x.split(' ')), raw.strip().split('\n'))
 
-# for line in open(path + 'points'):
-#     coords = map(lambda x: x.split(','), line.split('#')[0].split(';'))
-#     for e in coords:
-#         print map(lambda x: int(x), e)
+def ordered(rect):
+    avg_x = sum(map(lambda a: a[0], rect)) / 4.0
+    avg_y = sum(map(lambda a: a[1], rect)) / 4.0
+    return sorted(rect, key=lambda a: math.atan2(a[1] - avg_y, a[0] - avg_x))
 
-def dist(a, b):
-    return ((a[0]-b[0])**2 + (a[1]-b[1])**2)**0.5
+def dist((a, b)):
+    return ((a[0]-b[0])**2 + (a[1]-b[1])**2)
 
-for item in data:
-    out = subprocess.check_output(['../build/EmailRecognition', path + item[0], '-s'])
-    coords_out = sorted(eval(out), key=lambda l: math.atan2(l[1], l[0]))
-    coords_ans = sorted(item[1], key=lambda l: math.atan2(l[1], l[0]))
-    diff = 0
-    for i in range(4):
-        diff += dist(coords_out[i], coords_ans[i])
-    print item[0], diff
-    # print coords_ans
-    # print map(lambda l: math.atan2(l[1], l[0]), coords_ans)
-    # print coords_out
-    # print map(lambda l: math.atan2(l[1], l[0]), coords_out)
+def grade(out, ans):
+    return sum(map(dist, zip(ans, out)))
+
+def test_card():
+    for f in os.listdir(cardpath):
+        if os.path.isfile(cardpath + f):
+            print f
+            out = subprocess.check_output([execpath, '-cut', cardpath + f])
+            ans = open(cardpath + f + '.mark/bounds.quad').read()
+            # print ordered(parse(out))
+            # print ordered(parse(ans))
+            print grade(ordered(parse(out)), ordered(parse(ans)))
+
+test_card()

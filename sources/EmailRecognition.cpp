@@ -5,8 +5,6 @@ using namespace std;
 
 RNG rng(12345);
 
-
-
 tesseract::TessBaseAPI tess;
 
 bool polyComparator(const vector<Point> &a, const vector<Point> &b) {

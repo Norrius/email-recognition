@@ -1,6 +1,7 @@
 import os
 import math
 import subprocess
+import matplotlib.pyplot as plt
 
 path = os.path.dirname(os.path.realpath(__file__))
 execpath = path + '/../build/EmailRecognition'
@@ -33,13 +34,43 @@ def grade(out, ans):
     return sum(map(dist, zip(ans, out)))
 
 def test_card():
+    count_all = 0
+    count_good = 0
+    data = []
     for f in os.listdir(cardpath):
         if os.path.isfile(cardpath + f):
-            print f
+            print f,
             out = subprocess.check_output([execpath, '-cut', cardpath + f])
             ans = open(cardpath + f + '.mark/bounds.quad').read()
             # print ordered(parse(out))
             # print ordered(parse(ans))
-            print grade(ordered(parse(out)), ordered(parse(ans)))
+            res = grade(ordered(parse(out)), ordered(parse(ans)))
+            data.append(res)
+            count_all += 1
+            if res < 1e6:
+                count_good += 1
+                print '+', res
+            else:
+                print '-', res
+    print count_good / float(count_all)
+    return data
 
-test_card()
+def test_email():
+    files = [cardpath + f for f in os.listdir(cardpath) if os.path.isfile(cardpath + f)]
+    # print files
+    files = files[:20]
+    out = subprocess.check_output([execpath, '-text'] + files)
+    print out
+    # for f in files:
+        # print f,
+        # ans = open(f + '.mark/bounds.quad').read()
+        # print ordered(parse(out))
+        # print ordered(parse(ans))
+        # res = grade(/ordered(parse(out)), ordered(parse(ans)))
+        # print ans
+
+# data = test_card()
+# plt.scatter(range(len(data)), data)
+# plt.savefig("plot.png", dpi=300)
+
+test_email()

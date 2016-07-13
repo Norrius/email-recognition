@@ -35,7 +35,7 @@ RotatedRect getRectangle(const Mat &image, const ERSettings &set, Mat *output) {
     if (output) {
         cvtColor(gray, *output, CV_GRAY2BGR);
         // gray.copyTo(*output);
-        cerr << polys.size() << endl;
+//        cerr << polys.size() << endl;
         for (int i = 0; i < (int)polys.size(); ++i) {
             Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255));
             drawContours(*output, polys, i, color, set.w, 8, 0, 0, Point());
@@ -117,7 +117,7 @@ char* getText(const Mat &image) {
     tess.Recognize(0);
 
     char* s = tess.GetUTF8Text();
-    // cout << tess.MeanTextConf() << endl;
+//    cerr << tess.MeanTextConf() << endl;
 
     return s;
 }
@@ -134,12 +134,19 @@ vector<string> getTextFromAllFields(const Mat &image, const ERSettings &set) {
 }
 
 string chooseBestString(const vector<string> &strings) {
-    for (string s : strings) {
-        if (std::find(s.begin(), s.end(), '@') != s.end()) {
-            return s;
+    int n = (int)strings.size();
+    int l;
+    vector<int> scores(n, 0);
+    for (int i = 0; i < n; ++i) {
+        if (find(strings[i].begin(), strings[i].end(), '@') != strings[i].end()) {
+            scores[i] += 3;
+        }
+        l = strings[i].length();
+        if (l > 10 && l < 25) {
+            scores[i] += 1;
         }
     }
-    return "<notfound>";
+    return strings[max_element(scores.begin(), scores.end()) - scores.begin()];
 }
 
 void init() {

@@ -35,7 +35,6 @@ void onTrackbar(int, void*) {
     threshold(gray, binary, 0.0, 255.0, CV_THRESH_BINARY | CV_THRESH_OTSU);
 
     imshow(WINDOW_MAIN, binary);
-    cout << getText(card(fields[m]).clone());
 
     // Show contours
     imshow(WINDOW_CONTOUR, outputContour);
@@ -45,13 +44,17 @@ void onTrackbar(int, void*) {
     Point2f rectPoints[4];
     rect.points(rectPoints);
     for (int i = 0; i < 4; ++i) {
-        line(outputCard, rectPoints[i], rectPoints[(i+1)%4], Scalar(0, 0, 255), set.w, 8);
+        line(outputCard, rectPoints[i], rectPoints[(i+1)%4], Scalar(0, 255, 0), set.w, 8);
     }
     imshow(WINDOW_CARD, outputCard);
 
     // Morphology
     imshow(WINDOW_MORPH, outputMorph);
+
+    // Text recognition
+    cout << "Current text: " << getText(card(fields[m]).clone()) << endl;
 }
+
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -60,7 +63,7 @@ int main(int argc, char** argv) {
     }
 
     init();
-    
+
     if (strcmp(argv[1], "-cut") == 0) {
         for (int i = 2; i < argc; ++i) {
             Mat image = imread(argv[i]);
@@ -93,9 +96,7 @@ int main(int argc, char** argv) {
     }
     images = vector<Mat>(argc - 1);
     for (int i = 1; i < argc; ++i) {
-        // Mat image;
         images[i-1] = imread(argv[i]);
-        // resize(images[i-1], images[i-1], Size(), 0.3, 0.3);
         if (!images[i-1].data) {
             cerr << "could not load image" << endl;
             return -1;
@@ -113,8 +114,8 @@ int main(int argc, char** argv) {
 
     createTrackbar("Threshold 1", WINDOW_MAIN, &set.thr1, 200, onTrackbar);
     createTrackbar("Threshold 2", WINDOW_MAIN, &set.thr2, 200, onTrackbar);
-    createTrackbar("Kernel X", WINDOW_MAIN, &set.d1, 15, onTrackbar);
-    createTrackbar("Kernel Y", WINDOW_MAIN, &set.d2, 15, onTrackbar);
+    createTrackbar("Kernel X", WINDOW_MAIN, &set.d1, 20, onTrackbar);
+    createTrackbar("Kernel Y", WINDOW_MAIN, &set.d2, 7, onTrackbar);
     if (images.size() > 1) {
         createTrackbar("Image", WINDOW_MAIN, &n, images.size()-1, onTrackbar);
     }
